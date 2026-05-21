@@ -203,6 +203,6 @@ Top-level orchestration agents from [managedcode/dotnet-skills](https://github.c
 
 ## Credits
 
-`.NET` skills (aspnet-core, legacy-aspnet, modern-csharp, etc.) and agents are copied verbatim from [managedcode/dotnet-skills](https://github.com/managedcode/dotnet-skills) (MIT License).
+`.NET` skills (aspnet-core, legacy-aspnet, modern-csharp, etc.) and agents are from [managedcode/dotnet-skills](https://github.com/managedcode/dotnet-skills) (MIT License).
 
 Optimizely CMS 12 skills are custom, built against the [Optimizely CMS 12 developer docs](https://docs.developers.optimizely.com/content-management-system/).
