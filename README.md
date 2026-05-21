@@ -25,19 +25,27 @@ migration-workspace/
 ```bash
 mkdir migration-workspace
 cd migration-workspace
-# copy your old solution in
+
+# copy your old solution in (read-only reference)
 cp -r /path/to/old-cms11-solution ./old-solution
 
-# create new .NET 8 solution
-dotnet new web -n MyProject
-mv MyProject new-solution
+# install Optimizely templates and CLI
+dotnet new install EPiServer.Templates
+dotnet tool install EPiServer.Net.Cli --global \
+  --add-source https://nuget.optimizely.com/feed/packages.svc/
 
-# install skills
+# create new CMS 12 solution using the official Alloy demo template
+# (already has Program.cs, AddCms(), TinyMCE, auth, and folder conventions wired up)
+dotnet new epi-alloy-mvc --name MyProject --output new-solution
+
+# install skills into the new solution
 cd new-solution
+git init
 git submodule add https://github.com/azeznassar/dotnet-optimizely-skills .optimizely-skills
 cp -r .optimizely-skills/.claude .
 cp .optimizely-skills/CLAUDE.md .
 mkdir -p ../audit-output
+git add . && git commit -m "chore: Alloy CMS 12 template as migration base"
 ```
 
 **2. Run Phase 1 — Audit (fully automated):**
@@ -66,6 +74,8 @@ claude "Read CLAUDE.md. Set up Program.cs, DI registration, and appsettings.json
 ```bash
 claude "Read CLAUDE.md. Run Phase 3 validation. Do not proceed past schema diff if any CRITICAL issues exist."
 ```
+
+> **Why Alloy?** The official Optimizely Alloy demo template ships with CMS 12 fully wired — correct `Program.cs`, `AddCms()`, TinyMCE, ASP.NET Core Identity, Optimizely NuGet feed, view location conventions, and `TemplateCoordinator`. Starting from Alloy means Phase 2 skips the entire startup bootstrap and the agent focuses purely on migrating your content types and business logic on top of a known-good foundation. Alloy also ships item templates (`epi-cms-contenttype`, `epi-cms-job`, `epi-cms-pagecontroller`) that the agent uses to scaffold new files.
 
 > **CLAUDE.md is the brain.** It persists migration state across sessions, enforces rules (never modify old-solution, always preserve GUIDs), tracks build progress, and tells Claude exactly which skill to use at each step.
 
@@ -203,6 +213,6 @@ Top-level orchestration agents from [managedcode/dotnet-skills](https://github.c
 
 ## Credits
 
-`.NET` skills (aspnet-core, legacy-aspnet, modern-csharp, etc.) and agents are from [managedcode/dotnet-skills](https://github.com/managedcode/dotnet-skills) (MIT License).
+`.NET` skills (aspnet-core, legacy-aspnet, modern-csharp, etc.) and agents are copied verbatim from [managedcode/dotnet-skills](https://github.com/managedcode/dotnet-skills) (MIT License).
 
 Optimizely CMS 12 skills are custom, built against the [Optimizely CMS 12 developer docs](https://docs.developers.optimizely.com/content-management-system/).
