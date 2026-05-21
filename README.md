@@ -1,30 +1,100 @@
-# optimizely-cms12-skills
+# dotnet-optimizely-skills
 
-Agent skills and orchestration agents for migrating legacy EPiServer/Optimizely CMS 11 (.NET 4.x) to Optimizely CMS 12 (.NET 8) using a fresh-build approach.
+Agent skills and orchestration agents for migrating EPiServer/Optimizely CMS 11 (.NET 4.x) to CMS 12 (.NET 8) using a fresh-build approach.
 
 Works with Claude Code, GitHub Copilot, Gemini, Codex, and Junie.
 
 ---
 
-## Installation
+## Quick Start
 
-### Option A — Copy into your project (recommended)
-```bash
-git clone https://github.com/yourname/optimizely-cms12-skills.git
-cp -r optimizely-cms12-skills/.claude your-solution/
+### Option A — Automated Workspace (recommended for full migrations)
+
+Set up a workspace with old and new codebases side by side, and let Claude Code drive the entire migration:
+
+```
+migration-workspace/
+├── old-solution/       ← your CMS 11 source (read-only)
+├── new-solution/       ← your fresh .NET 8 project
+│   ├── .claude/        ← copy skills + agents here (see installation)
+│   └── CLAUDE.md       ← copy from this repo — drives the automation
+└── audit-output/       ← JSON inventories produced automatically
 ```
 
-### Option B — Git submodule
+**1. Set up the workspace:**
 ```bash
-git submodule add https://github.com/yourname/optimizely-cms12-skills.git .optimizely-skills
+mkdir migration-workspace
+cd migration-workspace
+# copy your old solution in
+cp -r /path/to/old-cms11-solution ./old-solution
+
+# create new .NET 8 solution
+dotnet new web -n MyProject
+mv MyProject new-solution
+
+# install skills
+cd new-solution
+git submodule add https://github.com/azeznassar/dotnet-optimizely-skills .optimizely-skills
 cp -r .optimizely-skills/.claude .
+cp .optimizely-skills/CLAUDE.md .
+mkdir -p ../audit-output
 ```
+
+**2. Run Phase 1 — Audit (fully automated):**
+```bash
+cd new-solution
+claude "Read CLAUDE.md. We are starting Phase 1. Run all four audit steps in order and save output to ../audit-output/. Report when complete."
+```
+
+**3. Review audit output, then run Phase 2 — Build:**
+```bash
+# Single session (sequential)
+claude "Read CLAUDE.md and ../audit-output/. We are in Phase 2. Start from Step 1 and work through all steps in order. Commit after each step."
+
+# OR parallel sessions (faster for large codebases)
+# Terminal 1 — pages
+claude "Read CLAUDE.md. Build all PageData content types from ../audit-output/content-types.json into src/Models/Pages/"
+# Terminal 2 — blocks  
+claude "Read CLAUDE.md. Build all BlockData content types from ../audit-output/content-types.json into src/Models/Blocks/"
+# Terminal 3 — infrastructure
+claude "Read CLAUDE.md. Migrate all scheduled jobs and init modules from ../audit-output/modules.json"
+# Terminal 4 — startup
+claude "Read CLAUDE.md. Set up Program.cs, DI registration, and appsettings.json"
+```
+
+**4. Run Phase 3 — Validate:**
+```bash
+claude "Read CLAUDE.md. Run Phase 3 validation. Do not proceed past schema diff if any CRITICAL issues exist."
+```
+
+> **CLAUDE.md is the brain.** It persists migration state across sessions, enforces rules (never modify old-solution, always preserve GUIDs), tracks build progress, and tells Claude exactly which skill to use at each step.
+
+---
+
+### Option B — Manual skill-by-skill
+
+Use individual skills on demand without the automated workspace:
+
+```bash
+# Install
+git clone https://github.com/azeznassar/dotnet-optimizely-skills.git
+cp -r dotnet-optimizely-skills/.claude your-solution/
+```
+
+Then invoke skills directly in Claude Code:
+```
+"Run the optimizely-content-type-auditor skill against src/Models/"
+"Use the optimizely-content-type-builder skill to create a new ArticlePage"
+"Use the optimizely-startup-wiring skill to set up Program.cs"
+```
+
+---
 
 ### Option C — curl individual skills
 ```bash
-mkdir -p .claude/skills/optimizely-content-type-auditor
-curl -o .claude/skills/optimizely-content-type-auditor/SKILL.md \
-  https://raw.githubusercontent.com/yourname/optimizely-cms12-skills/main/.claude/skills/optimizely-content-type-auditor/SKILL.md
+mkdir -p .claude/skills/optimizely-content-type-builder
+curl -o .claude/skills/optimizely-content-type-builder/SKILL.md \
+  https://raw.githubusercontent.com/azeznassar/dotnet-optimizely-skills/main/.claude/skills/optimizely-content-type-builder/SKILL.md
 ```
 
 ---
@@ -35,7 +105,7 @@ Top-level orchestration agents from [managedcode/dotnet-skills](https://github.c
 
 | Agent | Purpose |
 |---|---|
-| `dotnet-modernization` | **Start here** — routes all upgrade, migration, and legacy modernization work |
+| `dotnet-modernization` | **Start here for ad-hoc work** — routes all upgrade, migration, and legacy modernization tasks |
 | `dotnet-router` | Classifies tasks and routes to the right skill |
 | `dotnet-build` | Restore, build, pack, CI, diagnostics |
 | `dotnet-data` | EF Core, EF6, migrations, query issues |
@@ -45,7 +115,7 @@ Top-level orchestration agents from [managedcode/dotnet-skills](https://github.c
 
 ## Skills (`.claude/skills/`)
 
-### Optimizely CMS 12 — Phase 1: Audit (run against OLD codebase first)
+### Optimizely CMS 12 — Phase 1: Audit
 
 | Skill | Trigger | Purpose |
 |---|---|---|
@@ -54,7 +124,7 @@ Top-level orchestration agents from [managedcode/dotnet-skills](https://github.c
 | `optimizely-init-module-scanner` | "scan initialization modules" | Finds IInitializableModule, IInitializableHttpModule, scheduled jobs |
 | `optimizely-route-auditor` | "audit routing" | Finds partial routers, custom routes, URL handlers |
 
-### Optimizely CMS 12 — Phase 2: Build (run against NEW project)
+### Optimizely CMS 12 — Phase 2: Build
 
 | Skill | Trigger | Purpose |
 |---|---|---|
@@ -72,61 +142,67 @@ Top-level orchestration agents from [managedcode/dotnet-skills](https://github.c
 
 | Skill | Trigger | Purpose |
 |---|---|---|
-| `optimizely-content-schema-diff` | "compare content types old vs new" | Diffs old vs new inventories before DB migration — must be zero CRITICAL issues |
-
----
+| `optimizely-content-schema-diff` | "compare content types old vs new" | Diffs old vs new inventories — must be zero CRITICAL issues before DB migration |
 
 ### .NET & ASP.NET Core (from [managedcode/dotnet-skills](https://github.com/managedcode/dotnet-skills))
 
-| Skill | Trigger | Purpose |
-|---|---|---|
-| `aspnet-core` | Any ASP.NET Core task | Modern hosting, middleware, auth, routing, deployment patterns |
-| `legacy-aspnet` | Reading old .NET 4.x code | Web Forms, legacy MVC, classic EPiServer patterns (audit/read only) |
-| `modern-csharp` | Writing any C# | Records, pattern matching, nullable refs, version-aware C# |
-| `minimal-apis` | New lightweight endpoints | Minimal API groups, TypedResults, filters |
-| `web-api` | REST API controllers | [ApiController], model binding, validation, responses |
-| `worker-services` | Background processing | IHostedService, BackgroundService patterns |
-| `entity-framework-core` | EF Core data access | DbContext, migrations, queries, performance |
-| `entity-framework6` | Reading old EF6 code | EF6 patterns for audit/migration planning |
-| `optimizing-ef-core-queries` | Slow EF queries | N+1 fixes, tracking modes, compiled queries |
-| `dotnet` | General .NET platform | SDK, runtime, project structure, tooling |
-| `project-setup` | New project creation | Solution layout, .csproj, Directory.Build.props |
-| `architecture` | Solution design | Clean architecture, dependency rules, layering |
-| `code-review` | PR reviews | .NET-specific review patterns, analyzer usage |
-| `thread-abort-migration` | Thread.Abort usage | Migrating Thread.Abort to CancellationToken |
-| `migrate-nullable-references` | NRT enablement | Enabling nullable reference types incrementally |
+| Skill | Purpose |
+|---|---|
+| `aspnet-core` | Modern hosting, middleware, auth, routing, deployment patterns |
+| `legacy-aspnet` | Reading old .NET 4.x patterns during audit (read-only reference) |
+| `modern-csharp` | Records, pattern matching, nullable refs, version-aware C# |
+| `minimal-apis` | Minimal API groups, TypedResults, filters |
+| `web-api` | [ApiController], model binding, validation, responses |
+| `worker-services` | IHostedService, BackgroundService patterns |
+| `entity-framework-core` | DbContext, migrations, queries, performance |
+| `entity-framework6` | EF6 patterns for audit/migration planning |
+| `optimizing-ef-core-queries` | N+1 fixes, tracking modes, compiled queries |
+| `dotnet` | SDK, runtime, project structure, tooling |
+| `project-setup` | Solution layout, .csproj, Directory.Build.props |
+| `architecture` | Clean architecture, dependency rules, layering |
+| `code-review` | .NET-specific review patterns, analyzer usage |
+| `thread-abort-migration` | Thread.Abort → CancellationToken |
+| `migrate-nullable-references` | Enabling nullable reference types incrementally |
 
 ---
 
-## Migration Order
+## Migration Order (manual reference)
 
 ```
-1.  dotnet-modernization agent  → routes all work automatically
-2.  optimizely-content-type-auditor    → inventory JSON from old codebase
-3.  optimizely-dependency-mapper       → package migration plan
-4.  optimizely-init-module-scanner     → module + job migration notes
-5.  optimizely-route-auditor           → routing migration notes
-    ── NEW .NET 8 SOLUTION ──
-6.  project-setup                      → solution/project structure
-7.  optimizely-startup-wiring          → Program.cs, AddCms(), pipeline
-8.  optimizely-content-type-builder    → rebuild all content types (use audit inventory)
-9.  legacy-ioc-to-di                   → StructureMap/Windsor → IServiceCollection
-10. optimizely-di-registration         → CMS-specific service registration
-11. webconfig-to-appsettings           → config migration
-12. globalasax-to-program              → bootstrap migration
-13. httpmodule-to-middleware           → HTTP module migration
-14. optimizely-view-engine-migrator    → views + block components
-15. optimizely-scheduled-job-migrator  → scheduled jobs
-16. optimizing-ef-core-queries         → data access tuning
-17. migrate-nullable-references        → clean up nullability
-18. optimizely-content-schema-diff     → MUST be zero CRITICAL before DB migration
-19. DB migration on staging → content spot-check → production
+── PHASE 1: AUDIT ──────────────────────────────────────────────
+1.  optimizely-content-type-auditor    → audit-output/content-types.json
+2.  optimizely-dependency-mapper       → audit-output/packages.json
+3.  optimizely-init-module-scanner     → audit-output/modules.json
+4.  optimizely-route-auditor           → audit-output/routes.json
+
+── PHASE 2: BUILD ──────────────────────────────────────────────
+5.  project-setup                      → .csproj, solution structure
+6.  optimizely-startup-wiring          → Program.cs, AddCms(), pipeline
+7.  legacy-ioc-to-di                   → StructureMap/Windsor → IServiceCollection
+8.  optimizely-di-registration         → CMS-specific service registration
+9.  webconfig-to-appsettings           → config migration
+10. optimizely-content-type-builder    → all PageData types
+11. optimizely-content-type-builder    → all BlockData types
+12. optimizely-content-type-builder    → all MediaData types
+13. optimizely-init-module-scanner     → IInitializableModule migration
+14. httpmodule-to-middleware           → IHttpModule → middleware
+15. globalasax-to-program             → Global.asax → Program.cs
+16. optimizely-view-engine-migrator    → controllers + views
+17. optimizely-scheduled-job-migrator  → scheduled jobs
+18. optimizely-route-auditor           → routing migration
+
+── PHASE 3: VALIDATE ───────────────────────────────────────────
+19. optimizely-content-schema-diff     → MUST be zero CRITICAL issues
+20. dotnet build                       → MUST succeed
+21. DB migration on staging
+22. Content spot-check in CMS 12 editor
+23. Production deploy
 ```
 
 ---
 
 ## Credits
 
-`.NET` skills in `.claude/skills/` (aspnet-core, legacy-aspnet, modern-csharp, etc.) and agents are copied verbatim from [managedcode/dotnet-skills](https://github.com/managedcode/dotnet-skills) (MIT License).
+`.NET` skills (aspnet-core, legacy-aspnet, modern-csharp, etc.) and agents are copied verbatim from [managedcode/dotnet-skills](https://github.com/managedcode/dotnet-skills) (MIT License).
 
-Optimizely CMS 12 skills are custom, built against the [Optimizely developer docs](https://docs.developers.optimizely.com/content-management-system/).
+Optimizely CMS 12 skills are custom, built against the [Optimizely CMS 12 developer docs](https://docs.developers.optimizely.com/content-management-system/).
