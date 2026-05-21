@@ -139,5 +139,5 @@ cp -r dotnet-optimizely-skills/.claude your-project/
 
 ## Credits
 
-`.NET` skills and agents copied verbatim from [managedcode/dotnet-skills](https://github.com/managedcode/dotnet-skills) (MIT License).
+`.NET` skills and agents from [managedcode/dotnet-skills](https://github.com/managedcode/dotnet-skills) (MIT License).
 Optimizely CMS 12 skills built against the [Optimizely CMS 12 developer docs](https://docs.developers.optimizely.com/content-management-system/).
