@@ -4,19 +4,19 @@
 
 ```
 migration-workspace/
-├── old-solution/       ← CMS 11 source — READ ONLY, never modify
-├── new-solution/       ← CMS 12 fresh build based on Alloy template
-│   ├── .claude/        ← skills + agents from dotnet-optimizely-skills
-│   └── CLAUDE.md       ← this file
+├── old-solution/       ← CMS 11 source (READ ONLY)
+├── new-solution/       ← CMS 12 Alloy-based fresh build
+
+
 └── audit-output/       ← JSON inventories produced in Phase 1
 ```
 
 ## Absolute Rules
 
-- **NEVER modify anything in `../old-solution/`** — read-only reference only
+- **NEVER modify anything in `old-solution/`** — read-only reference only
 - **NEVER copy code from old-solution directly** — always rewrite using skill patterns
-- **ALWAYS preserve GUIDs exactly** from `../audit-output/content-types.json`
-- **ALWAYS check `../audit-output/`** for existing inventory before re-scanning
+- **ALWAYS preserve GUIDs exactly** from `audit-output/content-types.json`
+- **ALWAYS check `audit-output/`** for existing inventory before re-scanning
 - **ALWAYS check what Alloy already provides** before creating any content type, controller, or view
 - **ALWAYS use item templates** (`dotnet new epi-cms-contenttype` etc.) to scaffold new files — never write from scratch
 - **NEVER duplicate Alloy's existing content types** — extend or use them as base classes where appropriate
@@ -99,7 +99,7 @@ Always scaffold with item templates first, then fill in properties — never wri
 
 1. Read this `CLAUDE.md` in full
 2. Check `CURRENT_PHASE` and `BUILD_PROGRESS`
-3. Check `../audit-output/` for existing inventory files
+3. Check `audit-output/` for existing inventory files
 4. List `Models/Pages/`, `Models/Blocks/`, `Models/Media/` in new-solution to see what is already built
 5. Report current status before taking any action
 6. Ask which task to work on next, or proceed if given permission
@@ -111,23 +111,24 @@ Always scaffold with item templates first, then fill in properties — never wri
 **Run once before anything else. Skip if new-solution already exists.**
 
 ```bash
+# From migration-workspace/ root
+
 # Install Optimizely templates and CLI
 dotnet new install EPiServer.Templates
 dotnet tool install EPiServer.Net.Cli --global --add-source https://nuget.optimizely.com/feed/packages.svc/
 
-# Create Alloy as the new solution base
-cd migration-workspace
+# Create Alloy as the new solution
 dotnet new epi-alloy-mvc --name MyProject --output new-solution
 
-# Install skills
-cd new-solution
+# Install skills at workspace root (not inside new-solution)
+# Claude runs from here and can see both codebases directly
+git init
 git submodule add https://github.com/azeznassar/dotnet-optimizely-skills .optimizely-skills
 cp -r .optimizely-skills/.claude .
 cp .optimizely-skills/CLAUDE.md .
-mkdir -p ../audit-output
+mkdir -p audit-output
 
-# Initial commit
-git init && git add . && git commit -m "chore: Alloy CMS 12 template as migration base"
+git add . && git commit -m "chore: migration workspace setup"
 ```
 
 **After setup:**
@@ -145,45 +146,45 @@ Before auditing old-solution, document what Alloy already provides:
 ```
 List all files in Models/, Controllers/, Infrastructure/.
 For each content type found, record: className, baseClass, GUID, properties.
-Save to ../audit-output/alloy-baseline.json
+Save to audit-output/alloy-baseline.json
 This will be used in Phase 2 to avoid duplicating existing types.
 ```
 
 ### Step 2 — Content Types
 Use skill: `optimizely-content-type-auditor`
 ```
-Scan ../old-solution for all [ContentType] classes.
+Scan old-solution for all [ContentType] classes.
 Record className, baseClass, GUID, all properties and their types.
 Flag deprecated types (UrlBuilder, PageType property type, etc).
-Cross-reference with ../audit-output/alloy-baseline.json —
+Cross-reference with audit-output/alloy-baseline.json —
   mark any type that is equivalent to an Alloy type as "alloy-equivalent".
-Save to ../audit-output/content-types.json
+Save to audit-output/content-types.json
 ```
 
 ### Step 3 — Init Modules & Scheduled Jobs
 Use skill: `optimizely-init-module-scanner`
 ```
-Scan ../old-solution for IInitializableModule, IConfigurableModule,
+Scan old-solution for IInitializableModule, IConfigurableModule,
 IInitializableHttpModule, and ScheduledJobBase.
 Flag IInitializableHttpModule (removed in CMS 12).
-Save to ../audit-output/modules.json
+Save to audit-output/modules.json
 ```
 
 ### Step 4 — NuGet Packages
 Use skill: `optimizely-dependency-mapper`
 ```
-Read ../old-solution packages.config and .csproj files.
+Read old-solution packages.config and .csproj files.
 Map every EPiServer.* package to CMS 12 equivalent.
 Flag any package Alloy already includes (no need to add again).
-Save to ../audit-output/packages.json
+Save to audit-output/packages.json
 ```
 
 ### Step 5 — Routing
 Use skill: `optimizely-route-auditor`
 ```
-Scan ../old-solution for RouteTable.Routes registrations,
+Scan old-solution for RouteTable.Routes registrations,
 IPartialRouter implementations, custom URL handlers.
-Save to ../audit-output/routes.json
+Save to audit-output/routes.json
 ```
 
 **When audit is complete:**
@@ -202,9 +203,9 @@ Alloy's existing code stays intact — you are adding to it, not replacing it.
 Skill: `optimizely-startup-wiring`, `webconfig-to-appsettings`
 ```
 Alloy already has a working Program.cs — DO NOT recreate it.
-Only add what is missing from ../old-solution that Alloy does not cover:
+Only add what is missing from old-solution that Alloy does not cover:
   - Additional services registered in old Global.asax or IoC config
-  - Connection strings and app settings from ../old-solution web.config
+  - Connection strings and app settings from old-solution web.config
   - Any custom TinyMCE configuration
   - SchedulerOptions if scheduled jobs are present
 Update appsettings.json with migrated values only.
@@ -214,8 +215,8 @@ Commit: "feat: startup adaptations from legacy config"
 ### Step 2 — DI Registration
 Skills: `legacy-ioc-to-di`, `optimizely-di-registration`
 ```
-Read ../audit-output/modules.json for IConfigurableModule registrations.
-Read ../old-solution for StructureMap/Windsor/Autofac container setup.
+Read audit-output/modules.json for IConfigurableModule registrations.
+Read old-solution for StructureMap/Windsor/Autofac container setup.
 Add new registrations to Program.cs or a new IConfigurableModule.
 Do NOT touch Alloy's existing DI setup.
 Commit: "feat: DI registration migrated from legacy IoC"
@@ -224,7 +225,7 @@ Commit: "feat: DI registration migrated from legacy IoC"
 ### Step 3 — Content Types (Pages)
 Skill: `optimizely-content-type-builder`
 ```
-Read ../audit-output/content-types.json — process pages where baseClass == "PageData".
+Read audit-output/content-types.json — process pages where baseClass == "PageData".
 For each page type:
   - If marked "alloy-equivalent": skip or add only the missing properties to the Alloy type
   - If net-new: scaffold with `dotnet new epi-cms-contenttype -n {TypeName} -o Models/Pages/`
@@ -251,7 +252,7 @@ Output to Models/Media/
 ### Step 6 — Init Modules
 Skill: `optimizely-init-module-scanner`
 ```
-Read ../audit-output/modules.json.
+Read audit-output/modules.json.
 For each IInitializableModule:
   Scaffold: dotnet new epi-cms-initializationmodule -n {Name} -o Infrastructure/Initialization/
   Then implement Initialize/Uninitialize from the old-solution equivalent.
@@ -262,7 +263,7 @@ Commit: "feat: initialization modules migrated"
 ### Step 7 — Scheduled Jobs
 Skill: `optimizely-scheduled-job-migrator`
 ```
-Read ../audit-output/modules.json for ScheduledJobBase entries.
+Read audit-output/modules.json for ScheduledJobBase entries.
 For each job:
   Scaffold: dotnet new epi-cms-job -n {JobName} -o Infrastructure/ScheduledJobs/
   Implement Execute() from the old-solution equivalent.
@@ -276,7 +277,7 @@ Commit: "feat: scheduled jobs migrated"
 ### Step 8 — Routing
 Skill: `optimizely-route-auditor`
 ```
-Read ../audit-output/routes.json.
+Read audit-output/routes.json.
 Alloy handles most standard routing — only add custom routes that are not covered.
 Register IPartialRouter via builder.Services.AddSingleton.
 Commit: "feat: custom routing migrated"
@@ -299,7 +300,7 @@ Commit per group: "feat: {section} controllers and views"
 ### Step 10 — Global.asax / HTTP Modules
 Skills: `globalasax-to-program`, `httpmodule-to-middleware`
 ```
-Read ../old-solution Global.asax and HttpModule implementations.
+Read old-solution Global.asax and HttpModule implementations.
 Migrate remaining application lifecycle logic to Program.cs middleware or IHostedService.
 Alloy already handles the core Optimizely bootstrap — only add custom logic.
 Commit: "feat: application bootstrap migrated"
@@ -317,11 +318,11 @@ Commit: "feat: application bootstrap migrated"
 ### Step 1 — Schema Diff
 Skill: `optimizely-content-schema-diff`
 ```
-Compare ../audit-output/content-types.json against Models/ in new-solution.
+Compare audit-output/content-types.json against Models/ in new-solution.
 For alloy-equivalent types: verify any added properties are present.
 For net-new types: verify all properties and GUIDs match exactly.
 STOP if any CRITICAL issues exist. Do not proceed.
-Save to ../audit-output/schema-diff.json
+Save to audit-output/schema-diff.json
 ```
 
 ### Step 2 — Build Verification
